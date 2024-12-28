@@ -93,22 +93,32 @@ async def download_file_hybrid(request: Request,
 
         # 下载视频文件/Download video file
         if data_type == 'video':
+            print("!!!","is video")
             file_name = f"{file_prefix}{platform}_{aweme_id}.mp4" if not with_watermark else f"{file_prefix}{platform}_{aweme_id}_watermark.mp4"
             url = data.get('video_data').get('nwm_video_url_HQ') if not with_watermark else data.get('video_data').get(
                 'wm_video_url_HQ')
             file_path = os.path.join(download_path, file_name)
-
+            print("!!!",file_path)
             # 判断文件是否存在，存在就直接返回
             if os.path.exists(file_path):
+                print("!!! file already exist")
                 return FileResponse(path=file_path, media_type='video/mp4', filename=file_name)
 
             # 获取视频文件
             __headers = await HybridCrawler.TikTokWebCrawler.get_tiktok_headers() if platform == 'tiktok' else await HybridCrawler.DouyinWebCrawler.get_douyin_headers()
             response = await fetch_data(url, headers=__headers)
 
-            # 保存文件
-            async with aiofiles.open(file_path, 'wb') as out_file:
-                await out_file.write(response.content)
+            try:
+                print("!!! Starting async save...")
+                async with aiofiles.open(file_path, 'wb') as out_file:
+                    await out_file.write(response.content)
+                print("!!! Async save completed successfully.")
+            except Exception as e:
+                print("!!! Exception during async save:", str(e))
+
+            # # 保存文件
+            # async with aiofiles.open(file_path, 'wb') as out_file:
+            #     await out_file.write(response.content)
 
             # 返回文件内容
             return FileResponse(path=file_path, filename=file_name, media_type="video/mp4")
