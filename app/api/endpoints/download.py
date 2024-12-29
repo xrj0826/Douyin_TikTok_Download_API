@@ -6,6 +6,7 @@ import httpx
 import yaml
 from fastapi import APIRouter, Request, Query  # 导入FastAPI组件
 from starlette.responses import FileResponse
+from crawlers.utils.logger import logger
 
 from app.api.models.APIResponseModel import ErrorResponseModel  # 导入响应模型
 from crawlers.hybrid.hybrid_crawler import HybridCrawler  # 导入混合数据爬虫
@@ -20,9 +21,7 @@ with open(config_path, 'r', encoding='utf-8') as file:
 
 
 async def fetch_data(url: str, headers: dict = None):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    } if headers is None else headers.get('headers')
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'} if headers is None else headers.get('headers')
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()  # 确保响应是成功的
@@ -30,11 +29,8 @@ async def fetch_data(url: str, headers: dict = None):
 
 
 @router.get("/download", summary="在线下载抖音|TikTok视频/图片/Online download Douyin|TikTok video/image")
-async def download_file_hybrid(request: Request,
-                               url: str = Query(
-                                   example="https://www.douyin.com/video/7372484719365098803",
-                                   description="视频或图片的URL地址，也支持抖音|TikTok的分享链接，例如：https://v.douyin.com/e4J8Q7A/"),
-                               prefix: bool = True,
+async def download_file_hybrid(request: Request, url: str = Query(example="https://www.douyin.com/video/7372484719365098803",
+                                                                  description="视频或图片的URL地址，也支持抖音|TikTok的分享链接，例如：https://v.douyin.com/e4J8Q7A/"), prefix: bool = True,
                                with_watermark: bool = False):
     """
     # [中文]
@@ -70,8 +66,7 @@ async def download_file_hybrid(request: Request,
     if not config["API"]["Download_Switch"]:
         code = 400
         message = "Download endpoint is disabled in the configuration file. | 配置文件中已禁用下载端点。"
-        return ErrorResponseModel(code=code, message=message, router=request.url.path,
-                                  params=dict(request.query_params))
+        return ErrorResponseModel(code=code, message=message, router=request.url.path, params=dict(request.query_params))
 
     # 开始解析数据/Start parsing data
     try:
@@ -93,28 +88,27 @@ async def download_file_hybrid(request: Request,
 
         # 下载视频文件/Download video file
         if data_type == 'video':
-            print("!!!","is video")
+            logger.error("!!!is video")
             file_name = f"{file_prefix}{platform}_{aweme_id}.mp4" if not with_watermark else f"{file_prefix}{platform}_{aweme_id}_watermark.mp4"
-            url = data.get('video_data').get('nwm_video_url_HQ') if not with_watermark else data.get('video_data').get(
-                'wm_video_url_HQ')
+            url = data.get('video_data').get('nwm_video_url_HQ') if not with_watermark else data.get('video_data').get('wm_video_url_HQ')
             file_path = os.path.join(download_path, file_name)
-            print("!!!",file_path)
+            logger.error("!!!" + file_path)
             # 判断文件是否存在，存在就直接返回
             if os.path.exists(file_path):
-                print("!!! file already exist")
+                logger.error("!!! file already exist")
                 return FileResponse(path=file_path, media_type='video/mp4', filename=file_name)
-
+            logger.error("!!! file not exist")
             # 获取视频文件
             __headers = await HybridCrawler.TikTokWebCrawler.get_tiktok_headers() if platform == 'tiktok' else await HybridCrawler.DouyinWebCrawler.get_douyin_headers()
             response = await fetch_data(url, headers=__headers)
 
             try:
-                print("!!! Starting async save...")
+                logger.error("!!! Starting async save...")
                 async with aiofiles.open(file_path, 'wb') as out_file:
                     await out_file.write(response.content)
-                print("!!! Async save completed successfully.")
+                logger.error("!!! Async save completed successfully.")
             except Exception as e:
-                print("!!! Exception during async save:", str(e))
+                logger.error("!!! Exception during async save:", str(e))
 
             # # 保存文件
             # async with aiofiles.open(file_path, 'wb') as out_file:
@@ -134,8 +128,7 @@ async def download_file_hybrid(request: Request,
                 return FileResponse(path=zip_file_path, filename=zip_file_name, media_type="application/zip")
 
             # 获取图片文件/Get image file
-            urls = data.get('image_data').get('no_watermark_image_list') if not with_watermark else data.get(
-                'image_data').get('watermark_image_list')
+            urls = data.get('image_data').get('no_watermark_image_list') if not with_watermark else data.get('image_data').get('watermark_image_list')
             image_file_list = []
             for url in urls:
                 # 请求图片文件/Request image file
